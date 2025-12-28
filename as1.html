@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SNAKE GAME</title>
+<style>
+    body {
+        background: radial-gradient(circle, #1a1a2e 0%, #16213e 100%);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        color: #4df0ff;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        overflow: hidden;
+        touch-action: manipulation;
+    }
+    .game-wrapper {
+        background: rgba(255, 255, 255, 0.05);
+        padding: 30px;
+        border-radius: 20px;
+        box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(77, 240, 255, 0.3);
+        text-align: center;
+        backdrop-filter: blur(10px);
+    }
+    h1 { text-shadow: 0 0 10px #4df0ff; margin-bottom: 20px; letter-spacing: 2px; }
+    .stats-container { display: flex; justify-content: space-around; margin-bottom: 15px; font-size: 1.2rem; font-weight: bold; }
+    #score-box { color: #00ff88; text-shadow: 0 0 5px #00ff88; }
+    #level-box { color: #ffcc00; text-shadow: 0 0 5px #ffcc00; }
+    canvas {
+        border: 3px solid #4df0ff;
+        border-radius: 10px;
+        background-color: #0f3460;
+        box-shadow: 0 0 20px rgba(77, 240, 255, 0.2);
+        display: block;
+    }
+    .controls { margin-top: 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    .row { display: flex; gap: 15px; }
+    .btn {
+        background: transparent; border: 2px solid #4df0ff; color: #4df0ff;
+        width: 60px; height: 55px; border-radius: 12px; font-size: 1.2rem;
+        cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.2s;
+    }
+    .btn:active { background: #4df0ff; color: #1a1a2e; box-shadow: 0 0 15px #4df0ff; }
+    .overlay {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background: rgba(15, 52, 96, 0.98); padding: 30px; border-radius: 20px;
+        border: 2px solid #4df0ff; text-align: center; display: none; z-index: 100;
+        width: 80%; box-shadow: 0 0 30px #4df0ff;
+    }
+    input {
+        background: rgba(255,255,255,0.1); border: 1px solid #4df0ff; color: #fff;
+        padding: 10px; width: 60%; margin: 15px 0; border-radius: 10px; text-align: center;
+    }
+    button.action {
+        background: transparent; border: 2px solid #00ff88; color: #00ff88;
+        padding: 10px 25px; border-radius: 50px; cursor: pointer; font-weight: bold;
+    }
+</style>
+</head>
+<body>
+<div class="game-wrapper">
+    <h1>S N A K E <span style="color: #ff0055;"> GAME</span></h1>
+    <div class="stats-container">
+        <div id="score-box">النقاط: 0</div>
+        <div id="level-box">المستوى: 1</div>
+    </div>
+    
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+    <div class="controls">
+        <div class="row"><div class="btn" onclick="changeDir('UP')">اعلى</div></div>
+        <div class="row">
+            <div class="btn" onclick="changeDir('LEFT')">يمين</div>
+            <div class="btn" onclick="changeDir('DOWN')">أسفل</div>
+            <div class="btn" onclick="changeDir('RIGHT')">يسار</div>
+        </div>
+    </div>
+</div>
+
+<div id="quiz-overlay" class="overlay">
+    <h2 style="color: #ffcc00;">سؤال الترقية!</h2>
+    <p id="q-text" style="font-size: 1.5rem;"></p>
+    <input type="number" id="q-input">
+    <br>
+    <button id="submit-btn" class="action" onclick="checkQ()">إرسال</button>
+</div>
+
+<div id="fail-overlay" class="overlay" style="border-color: #ff0055; box-shadow: 0 0 30px #ff0055;">
+    <h2 style="color: #ff0055;">خسرت!</h2>
+    <p id="fail-text"></p>
+    <button class="action" style="border-color:#ff0055; color:#ff0055;" onclick="reset()">جرب حظك مرة ثانية!!</button>
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const box = 20;
+
+let snake, food, dx, dy, score, level, gameLoop, isPaused, ans, countdownInterval;
+
+const insults = ["نايم انت ؟ العب زين!", " جدي يلعب احسن منك!", "الرياضيات واللعب.. ضعت فيهما!", "ارجع  للمدرسة أسهل لك!"];
+const trapJokes = ["ههههه لا يا بطل 😈<br>كان فخ!","حسبتها صح؟<br>غلطان… ارجع من البداية 😂","مين قال لك تجاوب صح؟ 💀","انمسكت يا ذكي 😂"];
+const escapeJokes = ["غلطك أنقذك 😎<br>كمّل اللعب","حتى الغلط صار نعمة 😂","نجوت بالصدفة… لا تعيدها 👀","واضح إن الغلط حبيبك 👌"];
+
+function init() {
+    snake = [{x: 10, y: 10}]; dx = 0; dy = 0; score = 0; level = 1;
+    isPaused = false; spawnF(); updateUI();
+    if(gameLoop) clearInterval(gameLoop);
+    gameLoop = setInterval(draw, 150);
+    document.getElementById("fail-overlay").style.display = "none";
+    resetQuizInput();
+}
+
+function spawnF() {
+    food = { x: Math.floor(Math.random()*19), y: Math.floor(Math.random()*19) };
+}
+
+function changeDir(dir) {
+    if(isPaused) return;
+    if(dir === 'UP' && dy === 0) { dx = 0; dy = -1; }
+    else if(dir === 'DOWN' && dy === 0) { dx = 0; dy = 1; }
+    else if(dir === 'LEFT' && dx === 0) { dx = 1; dy = 0; }
+    else if(dir === 'RIGHT' && dx === 0) { dx = -1; dy = 0; }
+}
+
+function draw() {
+    if(isPaused) return;
+    let headX = snake[0].x + dx, headY = snake[0].y + dy;
+    if(dx !== 0 || dy !== 0) {
+        if(headX < 0 || headX >= 20 || headY < 0 || headY >= 20 || snake.some((p,i)=>i!==0 && p.x===headX && p.y===headY)) {
+            over(); return;
+        }
+    }
+    const head = {x: headX, y: headY};
+    if(dx !== 0 || dy !== 0) {
+        snake.unshift(head);
+        if(head.x === food.x && head.y === food.y) {
+            score++; updateUI();
+            if(score % 3 === 0) { quiz(); return; }
+            spawnF();
+        } else { snake.pop(); }
+    }
+    ctx.fillStyle = "#0f3460";
+    ctx.fillRect(0, 0, 400, 400);
+    ctx.shadowBlur = 15; ctx.shadowColor = "#ff0055";
+    ctx.fillStyle = "#ff0055";
+    ctx.beginPath();
+    ctx.arc(food.x*box+10, food.y*box+10, 8, 0, Math.PI*2);
+    ctx.fill(); ctx.shadowBlur = 0;
+    snake.forEach((p,i)=>{
+        ctx.fillStyle = i===0?"#00ff88":"#4df0ff";
+        ctx.shadowBlur = i===0?10:0;
+        ctx.shadowColor="#4df0ff";
+        ctx.beginPath();
+        ctx.roundRect(p.x*box+2, p.y*box+2, box-4, box-4, 8);
+        ctx.fill();
+    });
+}
+
+function quiz() {
+    isPaused = true;
+    let n1 = Math.floor(Math.random()*10), n2 = Math.floor(Math.random()*10);
+    ans = n1+n2;
+    const overlay = document.getElementById("quiz-overlay");
+    overlay.style.display = "block";
+    document.getElementById("q-text").innerHTML = `${n1} + ${n2} = ؟`;
+    resetQuizInput();
+}
+
+function resetQuizInput() {
+    const input = document.getElementById("q-input");
+    const btn = document.getElementById("submit-btn");
+    input.value = ""; input.style.display = "block";
+    btn.style.display = "inline-block";
+}
+
+function showMessage(title, text, color, hideInput=true) {
+    const overlay = document.getElementById("quiz-overlay");
+    overlay.querySelector("h2").innerHTML = title;
+    overlay.querySelector("h2").style.color = color;
+    document.getElementById("q-text").innerHTML = text;
+    const input = document.getElementById("q-input");
+    const btn = document.getElementById("submit-btn");
+    input.style.display = hideInput?"none":"block";
+    btn.style.display = hideInput?"none":"inline-block";
+    overlay.style.display = "block";
+}
+
+function checkQ() {
+    const userAnswer = parseInt(document.getElementById("q-input").value);
+    clearInterval(countdownInterval);
+
+    if(userAnswer === ans) {
+        showMessage("💀 وقعت في الفخ!", trapJokes[Math.floor(Math.random()*trapJokes.length)], "#ff0055", true);
+        startCountdown(3, over);
+    } else {
+        showMessage("😎 نجوت!", escapeJokes[Math.floor(Math.random()*escapeJokes.length)], "#00ff88", true);
+        startCountdown(3, ()=>{
+            document.getElementById("quiz-overlay").style.display="none";
+            resetQuizInput();
+            isPaused=false;
+        });
+    }
+}
+
+function startCountdown(seconds, callback) {
+    let counter = seconds;
+    const textEl = document.getElementById("q-text");
+    const originalText = textEl.innerHTML;
+    countdownInterval = setInterval(()=>{
+        textEl.innerHTML = `${originalText}<br><br>⏳ ${counter}`;
+        counter--;
+        if(counter<0){ clearInterval(countdownInterval); callback(); }
+    },1000);
+}
+
+function over(m) {
+    clearInterval(gameLoop);
+    document.getElementById("quiz-overlay").style.display = "none";
+    document.getElementById("fail-text").innerHTML = m||insults[Math.floor(Math.random()*insults.length)];
+    document.getElementById("fail-overlay").style.display = "block";
+}
+
+function updateUI() {
+    document.getElementById("score-box").innerText="النقاط: "+score;
+    document.getElementById("level-box").innerText="المستوى: "+level;
+}
+
+function reset(){ init(); }
+init();
+</script>
+</body>
+</html>
